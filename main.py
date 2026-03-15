@@ -176,7 +176,6 @@ class PlayState(GameState):
         self.score = 0
         self.font = ResourceManager().get_font('assets/fonts/font.ttf', 24)
         
-        # --- โหลดภาพพื้นหลังตามด่าน (Level 1 ใช้ bg1.png, Level 2 ใช้ bg2.png ...) ---
         bg_name = f'bg{self.app.current_level}'
         bg_path = f'assets/images/{bg_name}.png'
         self.bg_image = ResourceManager().get_image(bg_name, bg_path, (SCREEN_WIDTH, SCREEN_HEIGHT), (20, 20, 40))
@@ -189,7 +188,13 @@ class PlayState(GameState):
         self.SPAWN_ENEMY_TIMER = pygame.USEREVENT + 12
         
         pygame.time.set_timer(self.SPAWN_METEOR_TIMER, max(300, 1500 - (level_mult * 200)))
-        pygame.time.set_timer(self.SPAWN_POWERUP_TIMER, 10000)
+        
+        # --- 💊 อัปเกรดยา: เลเวลสูง ยิ่งดรอปไวขึ้น ---
+        # เลเวล 1: ดรอปทุกๆ ~10 วินาที
+        # เลเวล 5: ดรอปทุกๆ ~6 วินาที
+        powerup_delay = max(5000, 11000 - (level_mult * 1000))
+        pygame.time.set_timer(self.SPAWN_POWERUP_TIMER, powerup_delay)
+        
         pygame.time.set_timer(self.SPAWN_ENEMY_TIMER, max(800, 3000 - (level_mult * 400)))
 
     def handle_events(self, events):
@@ -257,8 +262,9 @@ class PlayState(GameState):
 class GameApp:
     def __init__(self):
         pygame.init()
-        # --- เปิดโหมดเต็มจออัตโนมัติ พร้อมสเกลให้พอดีหน้าจอ ---
-        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.FULLSCREEN | pygame.SCALED)
+        # --- เปลี่ยนโหมดเป็น RESIZABLE เพื่อเรียกขอบหน้าต่างและปุ่ม 3 ปุ่มกลับมา ---
+        # เมื่อกดปุ่มสี่เหลี่ยม (Maximize) ระบบ SCALED จะขยายภาพให้เต็มจอโดยรักษาสัดส่วนไว้ให้เอง
+        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE | pygame.SCALED)
         pygame.display.set_caption("OOP Space Shooter (20 Pointers Project)")
         self.clock = pygame.time.Clock()
         self.running = True
@@ -276,12 +282,14 @@ class GameApp:
         while self.running:
             events = pygame.event.get()
             for event in events:
+                # ระบบจะจับการกดปุ่มกากบาท (Close) อัตโนมัติที่นี่
                 if event.type == pygame.QUIT:
                     self.running = False
                 
-                # --- เพิ่มปุ่มลัด ESC สำหรับกดปิดเกมออกจากโหมดเต็มจอ ---
+                # หากต้องการกด ESC เพื่อสลับโหมดเต็มจอ (กดซ้ำเพื่อย่อ/ขยาย) 
+                # (เป็นลูกเล่นแถมให้ครับ นอกเหนือจากการกดปุ่มสี่เหลี่ยมด้วยเมาส์)
                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    self.running = False
+                    pygame.display.toggle_fullscreen()
 
             self.current_state.handle_events(events)
             self.current_state.update()
