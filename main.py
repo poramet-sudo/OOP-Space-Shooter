@@ -15,12 +15,21 @@ class MainMenuState(GameState):
         self.btn_skin = Button(SCREEN_WIDTH//2, 310, 'assets/images/ui/button.png', "SKINS", self.font_btn)
         self.btn_level = Button(SCREEN_WIDTH//2, 390, 'assets/images/ui/button.png', "LEVELS", self.font_btn)
         self.btn_exit = Button(SCREEN_WIDTH//2, 470, 'assets/images/ui/button.png', "EXIT", self.font_btn) 
+        
+        # --- UI ปุ่มเพิ่ม/ลดเสียง ปรับกรอบให้เล็กลง ---
+        self.font_small = ResourceManager().get_font('assets/fonts/font.ttf', 16) 
+        self.right_x = SCREEN_WIDTH - 40  
+        self.mid_y = SCREEN_HEIGHT // 2   
+        
+        # ปุ่ม + และ - ปรับขนาดกรอบให้เล็กกะทัดรัด (24x24) และขยับให้ชิดกันขึ้น
+        self.btn_vol_up = Button(self.right_x, self.mid_y - 30, 'assets/images/ui/button.png', "+", self.font_small, size=(24, 24))
+        self.btn_vol_down = Button(self.right_x, self.mid_y + 30, 'assets/images/ui/button.png', "-", self.font_small, size=(24, 24))
 
     def handle_events(self, events):
         for event in events:
             if self.btn_play.is_clicked(event):
                 self.app.current_level = 1
-                self.app.bonus_hp = 0 # รีเซ็ตเลือดสะสมเมื่อเริ่มเกมใหม่
+                self.app.bonus_hp = 0 
                 self.app.change_state(PlayState(self.app))
             elif self.btn_skin.is_clicked(event):
                 self.app.change_state(SkinSelectState(self.app))
@@ -28,6 +37,12 @@ class MainMenuState(GameState):
                 self.app.change_state(LevelSelectState(self.app))
             elif self.btn_exit.is_clicked(event):
                 self.app.running = False
+                
+            # --- ตรวจจับการกดปุ่มเพิ่ม/ลดเสียง ---
+            elif self.btn_vol_up.is_clicked(event):
+                ResourceManager().change_volume(0.1)  # เพิ่ม 10%
+            elif self.btn_vol_down.is_clicked(event):
+                ResourceManager().change_volume(-0.1) # ลด 10%
 
     def update(self): pass
 
@@ -40,6 +55,15 @@ class MainMenuState(GameState):
         self.btn_skin.draw(screen)
         self.btn_level.draw(screen)
         self.btn_exit.draw(screen)
+        
+        # วาดปุ่มเพิ่มลดเสียง
+        self.btn_vol_up.draw(screen)
+        self.btn_vol_down.draw(screen)
+        
+        # โชว์ตัวเลข % ความดังเสียงตรงกลางระหว่างปุ่ม + และ -
+        vol_pct = int(ResourceManager().bgm_volume * 100)
+        vol_text = self.font_small.render(f"{vol_pct}%", True, (255, 255, 255))
+        screen.blit(vol_text, vol_text.get_rect(center=(self.right_x, self.mid_y)))
 
 class SkinSelectState(GameState):
     def __init__(self, app):
@@ -102,7 +126,7 @@ class LevelSelectState(GameState):
             for btn, lvl, is_unlocked in self.buttons:
                 if btn.is_clicked(event) and is_unlocked:
                     self.app.current_level = lvl
-                    self.app.bonus_hp = 0 # รีเซ็ตเลือดสะสมหากผู้เล่นข้ามมาเลือกด่านเอง
+                    self.app.bonus_hp = 0 
                     self.app.change_state(PlayState(self.app))
             if self.btn_back.is_clicked(event):
                 self.app.change_state(MainMenuState(self.app))
@@ -141,7 +165,7 @@ class GameOverState(GameState):
                 self.app.current_level += 1
                 self.app.change_state(PlayState(self.app))
             elif self.btn_restart.is_clicked(event):
-                self.app.bonus_hp = 0 # ถ้ายานแตกแล้วกดเริ่มเล่นด่านเดิม เลือดที่สะสมมาจะหายไป (กลับไปเริ่มที่ 3)
+                self.app.bonus_hp = 0 
                 self.app.change_state(PlayState(self.app))
             elif self.btn_menu.is_clicked(event):
                 self.app.change_state(MainMenuState(self.app))
@@ -164,6 +188,46 @@ class GameOverState(GameState):
         self.btn_restart.draw(screen)
         self.btn_menu.draw(screen)
 
+class EndingState(GameState):
+    def __init__(self, app, score):
+        self.app = app
+        self.score = score
+        self.font_title = ResourceManager().get_font('assets/fonts/font.ttf', 50)
+        self.font_msg = ResourceManager().get_font('assets/fonts/font.ttf', 24)
+        self.font_btn = ResourceManager().get_font('assets/fonts/font.ttf', 20)
+        
+        self.bg = ResourceManager().get_image('bg5', 'assets/images/bg5.png', (SCREEN_WIDTH, SCREEN_HEIGHT), (20, 20, 40))
+
+        self.btn_menu = Button(SCREEN_WIDTH//2, 500, 'assets/images/ui/button.png', "MAIN MENU", self.font_btn, size=(220, 50))
+        
+        self.ship_img = ResourceManager().get_image('player', self.app.selected_skin, (80, 70), (0, 255, 0))
+        self.ship_y = SCREEN_HEIGHT + 100 
+
+    def handle_events(self, events):
+        for event in events:
+            if self.ship_y <= 250 and self.btn_menu.is_clicked(event):
+                self.app.change_state(MainMenuState(self.app))
+
+    def update(self):
+        if self.ship_y > 250:
+            self.ship_y -= 2 
+
+    def draw(self, screen):
+        screen.blit(self.bg, (0, 0))
+        screen.blit(self.ship_img, self.ship_img.get_rect(center=(SCREEN_WIDTH//2, self.ship_y)))
+
+        if self.ship_y <= 250:
+            title = self.font_title.render("UNIVERSE SAVED!", True, (0, 255, 255))
+            screen.blit(title, title.get_rect(center=(SCREEN_WIDTH//2, 100)))
+
+            msg = self.font_msg.render(f"FINAL SCORE: {self.score}", True, (255, 215, 0))
+            screen.blit(msg, msg.get_rect(center=(SCREEN_WIDTH//2, 160)))
+            
+            msg_hp = self.font_msg.render(f"SURVIVED WITH {self.app.bonus_hp} BONUS HP", True, (50, 255, 50))
+            screen.blit(msg_hp, msg_hp.get_rect(center=(SCREEN_WIDTH//2, 200)))
+
+            self.btn_menu.draw(screen)
+
 class PlayState(GameState):
     def __init__(self, game_app):
         self.app = game_app
@@ -174,7 +238,6 @@ class PlayState(GameState):
         self.enemies = pygame.sprite.Group()
         self.enemy_lasers = pygame.sprite.Group()
         
-        # --- ส่งต่อ bonus_hp ที่สะสมมา ให้คลาส Player สร้างตัวละคร ---
         self.player = Player(self.app.selected_skin, self.app.bonus_hp)
         self.all_sprites.add(self.player)
         
@@ -242,13 +305,14 @@ class PlayState(GameState):
 
     def check_level_clear(self):
         if self.score >= self.target_score:
-            if self.app.current_level == self.app.unlocked_levels and self.app.unlocked_levels < 5:
-                self.app.unlocked_levels += 1
-            
-            # --- ดึงเลือดที่รอดชีวิต มาบวกเข้ากระเป๋าโบนัส เพื่อส่งต่อไปด่านหน้า ---
             self.app.bonus_hp += self.player.get_hp()
             
-            self.app.change_state(GameOverState(self.app, self.score, is_victory=True))
+            if self.app.current_level == 5:
+                self.app.change_state(EndingState(self.app, self.score))
+            else:
+                if self.app.current_level == self.app.unlocked_levels and self.app.unlocked_levels < 5:
+                    self.app.unlocked_levels += 1
+                self.app.change_state(GameOverState(self.app, self.score, is_victory=True))
 
     def update(self):
         self.all_sprites.update()
@@ -277,9 +341,10 @@ class GameApp:
         self.unlocked_levels = 1
         self.current_level = 1
         self.selected_skin = 'assets/images/ships/ship1.png'
-        
-        # --- เพิ่มตัวแปรเก็บโบนัสเลือดสะสม (จะรีเซ็ตเหลือ 0 ทุกครั้งที่กดเริ่มเกมใหม่ หรือตายแล้วกด Retry) ---
         self.bonus_hp = 0 
+        
+        # โหลดเพลงพื้นหลัง
+        ResourceManager().play_bgm('assets/sounds/bgm.mp3')
         
         self.current_state = MainMenuState(self)
 

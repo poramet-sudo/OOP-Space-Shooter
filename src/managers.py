@@ -12,8 +12,11 @@ class ResourceManager:
             cls._instance.images = {}
             cls._instance.sounds = {}
             cls._instance.fonts = {} 
-            cls._instance.explosion_frames = [] # เพิ่มแคชเก็บรูประเบิด
+            cls._instance.explosion_frames = [] 
+            
             pygame.mixer.init()
+            cls._instance.bgm_playing = True 
+            cls._instance.bgm_volume = 0.2 # ระดับเสียงเริ่มต้นที่ 20%
         return cls._instance
 
     def get_image(self, name, path, size, fallback_color):
@@ -45,8 +48,31 @@ class ResourceManager:
         if self.sounds[name]:
             self.sounds[name].play()
 
+    def play_bgm(self, path):
+        try:
+            pygame.mixer.music.load(path)
+            pygame.mixer.music.set_volume(self.bgm_volume) 
+            pygame.mixer.music.play(-1) 
+        except Exception as e:
+            print(f"⚠️ โหลด BGM ไม่ได้: {e}")
+
+    def toggle_bgm(self):
+        if self.bgm_playing:
+            pygame.mixer.music.pause()
+            self.bgm_playing = False
+        else:
+            pygame.mixer.music.unpause()
+            self.bgm_playing = True
+        return self.bgm_playing
+
+    # --- ฟังก์ชันใหม่: ปรับระดับเสียง ---
+    def change_volume(self, amount):
+        self.bgm_volume += amount
+        self.bgm_volume = max(0.0, min(1.0, self.bgm_volume)) # ล็อกไว้ไม่ให้ต่ำกว่า 0 หรือเกิน 100%
+        pygame.mixer.music.set_volume(self.bgm_volume)
+        return self.bgm_volume
+
     def load_explosion_frames(self):
-        # โหลดรูปไฟระเบิด fire00.png ถึง fire09.png
         if self.explosion_frames:
             return self.explosion_frames
         
@@ -64,7 +90,6 @@ class ResourceManager:
         return self.explosion_frames
 
 class CollisionManager:
-    # เพิ่ม all_sprites เข้ามาเพื่อวาดระเบิดลงจอ
     def __init__(self, player, meteors, lasers, powerups, enemies, enemy_lasers, all_sprites):
         self.player = player
         self.meteors = meteors
@@ -75,7 +100,6 @@ class CollisionManager:
         self.all_sprites = all_sprites
 
     def check(self):
-        # 1. เลเซอร์ ชน อุกกาบาต
         hits = pygame.sprite.groupcollide(self.meteors, self.lasers, False, True)
         for meteor, laser_list in hits.items():
             meteor.hp -= len(laser_list)
@@ -84,12 +108,10 @@ class CollisionManager:
                 pygame.event.post(pygame.event.Event(EVENT_METEOR_DESTROYED))
                 ResourceManager().play_sound('explosion', 'assets/sounds/explosion.ogg')
                 
-                # โชว์เอฟเฟคระเบิด
                 from src.entities import Explosion
                 frames = ResourceManager().load_explosion_frames()
                 self.all_sprites.add(Explosion(meteor.rect.center, frames))
 
-        # 2. เลเซอร์ ชน ศัตรู AI
         enemy_hits = pygame.sprite.groupcollide(self.enemies, self.lasers, False, True)
         for enemy, laser_list in enemy_hits.items():
             enemy.hp -= len(laser_list)
@@ -98,23 +120,19 @@ class CollisionManager:
                 pygame.event.post(pygame.event.Event(EVENT_ENEMY_DESTROYED))
                 ResourceManager().play_sound('explosion', 'assets/sounds/explosion.ogg')
                 
-                # โชว์เอฟเฟคระเบิด
                 from src.entities import Explosion
                 frames = ResourceManager().load_explosion_frames()
                 self.all_sprites.add(Explosion(enemy.rect.center, frames))
 
-        # 3. ผู้เล่น โดนชน (อุกกาบาต, ศัตรู, เลเซอร์ศัตรู)
         if pygame.sprite.spritecollide(self.player, self.meteors, True) or \
            pygame.sprite.spritecollide(self.player, self.enemies, True) or \
            pygame.sprite.spritecollide(self.player, self.enemy_lasers, True):
             pygame.event.post(pygame.event.Event(EVENT_PLAYER_HIT))
             
-            # โชว์เอฟเฟคระเบิดตรงผู้เล่น
             from src.entities import Explosion
             frames = ResourceManager().load_explosion_frames()
             self.all_sprites.add(Explosion(self.player.rect.center, frames))
 
-        # 4. ผู้เล่น ชน ยาเพิ่มเลือด
         if pygame.sprite.spritecollide(self.player, self.powerups, True):
             pygame.event.post(pygame.event.Event(EVENT_POWERUP_COLLECTED))
             ResourceManager().play_sound('heal', 'assets/sounds/heal.ogg')

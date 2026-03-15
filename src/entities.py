@@ -24,6 +24,27 @@ class Button:
                 return True
         return False
 
+# --- คลาสใหม่: ปุ่มแบบรูปภาพ (ใช้ทำปุ่มลำโพง) ---
+class IconButton:
+    def __init__(self, x, y, image_path, size=(50, 50)):
+        self.image_path = image_path
+        self.size = size
+        self.image = ResourceManager().get_image(image_path, image_path, size, (100, 100, 100))
+        self.rect = self.image.get_rect(center=(x, y))
+
+    def draw(self, screen):
+        screen.blit(self.image, self.rect)
+
+    def is_clicked(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.rect.collidepoint(event.pos):
+                return True
+        return False
+        
+    def change_image(self, new_image_path):
+        self.image_path = new_image_path
+        self.image = ResourceManager().get_image(new_image_path, new_image_path, self.size, (100, 100, 100))
+
 class ShooterMixin:
     def shoot(self, all_sprites, laser_group, x, y, angle, laser_class):
         laser = laser_class(x, y, angle)
@@ -32,14 +53,13 @@ class ShooterMixin:
         ResourceManager().play_sound('laser', 'assets/sounds/laser.ogg')
 
 class Player(pygame.sprite.Sprite, ShooterMixin):
-    # --- ปรับให้รับ bonus_hp เข้ามาบวกเพิ่มตอนเริ่มด่าน ---
     def __init__(self, skin_path, bonus_hp=0): 
         super().__init__()
         self.original_image = ResourceManager().get_image('player', skin_path, (60, 50), (0, 255, 0))
         self.image = self.original_image
         self.rect = self.image.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT - 60))
         self.speed = 6
-        self.__hp = 3 + bonus_hp # เลือดพื้นฐาน 3 + เลือดที่สะสมมาจากด่านก่อนๆ
+        self.__hp = 3 + bonus_hp 
         self.angle = 0 
 
     def get_hp(self): return self.__hp
@@ -49,7 +69,6 @@ class Player(pygame.sprite.Sprite, ShooterMixin):
         ResourceManager().play_sound('damage', 'assets/sounds/damage.ogg') 
         
     def heal(self): 
-        # ปลดล็อกขีดจำกัดเลือด สามารถเก็บยาเพิ่มเลือดไปได้เรื่อยๆ ไม่มีลิมิต!
         self.__hp += 1
 
     def update(self):
