@@ -1,82 +1,180 @@
 import pygame
 import random
+import math
 from src.managers import ResourceManager
 from src.config import *
 
+class Button:
+    def __init__(self, x, y, image_path, text, font, size=(200, 50)):
+        self.image = ResourceManager().get_image(f'btn_{image_path}', image_path, size, (100, 100, 100))
+        self.rect = self.image.get_rect(center=(x, y))
+        self.text = text
+        self.font = font
+
+    def draw(self, screen):
+        screen.blit(self.image, self.rect)
+        if self.text:
+            txt_surf = self.font.render(self.text, True, (0, 0, 0))
+            txt_rect = txt_surf.get_rect(center=self.rect.center)
+            screen.blit(txt_surf, txt_rect)
+
+    def is_clicked(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.rect.collidepoint(event.pos):
+                return True
+        return False
+
 class ShooterMixin:
-    def shoot(self, all_sprites, laser_group):
-        laser = Laser(self.rect.centerx, self.rect.top)
+    def shoot(self, all_sprites, laser_group, x, y, angle, laser_class):
+        laser = laser_class(x, y, angle)
         all_sprites.add(laser)
         laser_group.add(laser)
         ResourceManager().play_sound('laser', 'assets/sounds/laser.ogg')
 
 class Player(pygame.sprite.Sprite, ShooterMixin):
-    def __init__(self):
+    def __init__(self, skin_path): 
         super().__init__()
-        self.image = ResourceManager().get_image('player', 'assets/images/ship.png', (60, 50), (0, 255, 0))
+        self.original_image = ResourceManager().get_image('player', skin_path, (60, 50), (0, 255, 0))
+        self.image = self.original_image
         self.rect = self.image.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT - 60))
         self.speed = 6
         self.__hp = 3
+        self.angle = 0 
 
     def get_hp(self): return self.__hp
-    def take_damage(self): self.__hp -= 1
     
-    # เพิ่มเมธอดสำหรับฮีลเลือด (Encapsulation)
+    def take_damage(self): 
+        self.__hp -= 1
+        ResourceManager().play_sound('damage', 'assets/sounds/damage.ogg') 
+        
     def heal(self): 
-        if self.__hp < 5: # จำกัดเลือดสูงสุดที่ 5
+        if self.__hp < 5: 
             self.__hp += 1
 
     def update(self):
         keys = pygame.key.get_pressed()
-        # เคลื่อนที่ 4 ทิศทาง พร้อมจำกัดขอบหน้าจอ
-        if keys[pygame.K_LEFT] and self.rect.left > 0: self.rect.x -= self.speed
-        if keys[pygame.K_RIGHT] and self.rect.right < SCREEN_WIDTH: self.rect.x += self.speed
-        if keys[pygame.K_UP] and self.rect.top > 0: self.rect.y -= self.speed
-        if keys[pygame.K_DOWN] and self.rect.bottom < SCREEN_HEIGHT: self.rect.y += self.speed
+        if (keys[pygame.K_LEFT] or keys[pygame.K_a]) and self.rect.left > 0: self.rect.x -= self.speed
+        if (keys[pygame.K_RIGHT] or keys[pygame.K_d]) and self.rect.right < SCREEN_WIDTH: self.rect.x += self.speed
+        if (keys[pygame.K_UP] or keys[pygame.K_w]) and self.rect.top > 0: self.rect.y -= self.speed
+        if (keys[pygame.K_DOWN] or keys[pygame.K_s]) and self.rect.bottom < SCREEN_HEIGHT: self.rect.y += self.speed
 
-class Laser(pygame.sprite.Sprite):
-    def __init__(self, x, y):
+        mouse_x, mouse_y = pygame.mouse.get_pos()
+        rel_x, rel_y = mouse_x - self.rect.centerx, mouse_y - self.rect.centery
+        self.angle = (180 / math.pi) * -math.atan2(rel_y, rel_x) - 90
+        
+        self.image = pygame.transform.rotate(self.original_image, int(self.angle))
+        self.rect = self.image.get_rect(center=self.rect.center)
+
+    def fire(self, all_sprites, lasers):
+        self.shoot(all_sprites, lasers, self.rect.centerx, self.rect.centery, self.angle, PlayerLaser)
+
+class BaseLaser(pygame.sprite.Sprite):
+    def __init__(self, x, y, angle, image_path, speed):
         super().__init__()
-        self.image = ResourceManager().get_image('laser', 'assets/images/laser.png', (5, 20), (255, 255, 0))
-        self.rect = self.image.get_rect(midbottom=(x, y))
-        self.speed = -10
+        img = ResourceManager().get_image('base_laser', image_path, (10, 30), (255, 255, 0))
+        self.image = pygame.transform.rotate(img, angle)
+        self.rect = self.image.get_rect(center=(x, y))
+        
+        rad = math.radians(angle + 90)
+        self.dx = math.cos(rad) * speed
+        self.dy = -math.sin(rad) * speed
 
     def update(self):
-        self.rect.y += self.speed
-        if self.rect.bottom < 0: self.kill()
+        self.rect.x += self.dx
+        self.rect.y += self.dy
+        if not (-50 < self.rect.x < SCREEN_WIDTH+50 and -50 < self.rect.y < SCREEN_HEIGHT+50): 
+            self.kill()
+
+class PlayerLaser(BaseLaser):
+    def __init__(self, x, y, angle):
+        super().__init__(x, y, angle, 'assets/images/laser.png', speed=12)
+
+class EnemyLaser(BaseLaser):
+    def __init__(self, x, y, angle):
+        super().__init__(x, y, angle, 'assets/images/laserRed01.png', speed=7)
+
+# --- ระบบบอท (AI ติดตามผู้เล่นและสุ่มสี) ---
+class EnemyShip(pygame.sprite.Sprite):
+    def __init__(self, x, y, player, level): 
+        super().__init__()
+        # สุ่มสียานศัตรู
+        colors = ['black', 'blue', 'green', 'red']
+        chosen_color = random.choice(colors)
+        img_path = f'assets/images/enemy_{chosen_color}.png'
+        
+        self.original_image = ResourceManager().get_image(f'enemy_{chosen_color}', img_path, (50, 50), (255, 0, 0))
+        self.image = self.original_image
+        self.rect = self.image.get_rect(center=(x, y))
+        
+        # ยิ่งด่านลึก ยิ่งวิ่งเร็วและเลือดยาวขึ้น
+        self.speed = random.randint(1 + (level // 2), 3 + (level // 2)) 
+        self.hp = 1 + (level // 2)
+        
+        self.last_shot = pygame.time.get_ticks()
+        # ยิ่งด่านลึก ยิ่งยิงรัวขึ้น
+        self.shoot_delay = max(800, random.randint(1500, 3000) - (level * 200)) 
+        self.player = player
+        self.angle = 180
+
+    def update(self):
+        # AI เคลื่อนที่เข้าหาผู้เล่น
+        self.rect.y += self.speed # บินลงมาข้างล่างเสมอ
+        
+        if self.player and self.player.alive():
+            # ขยับแกน X บินตามผู้เล่นแบบเนียนๆ (Tracking X)
+            tracking_speed = max(1, self.speed // 2) # ตามช้ากว่าบินลงนิดหน่อยเพื่อให้หลบได้
+            if self.rect.centerx < self.player.rect.centerx:
+                self.rect.x += tracking_speed
+            elif self.rect.centerx > self.player.rect.centerx:
+                self.rect.x -= tracking_speed
+
+            # เล็งปืนมาที่ผู้เล่น
+            rel_x, rel_y = self.player.rect.centerx - self.rect.centerx, self.player.rect.centery - self.rect.centery
+            self.angle = (180 / math.pi) * -math.atan2(rel_y, rel_x) - 90
+            
+        self.image = pygame.transform.rotate(self.original_image, int(self.angle))
+        self.rect = self.image.get_rect(center=self.rect.center)
+        
+        now = pygame.time.get_ticks()
+        if now - self.last_shot > self.shoot_delay:
+            self.last_shot = now
+            pygame.event.post(pygame.event.Event(EVENT_ENEMY_SHOOT, {'x': self.rect.centerx, 'y': self.rect.centery, 'angle': self.angle}))
+            
+        if self.rect.top > SCREEN_HEIGHT: 
+            self.kill()
 
 class Meteor(pygame.sprite.Sprite):
-    def __init__(self, x, y, speed, size, hp):
+    def __init__(self, size, level): # เพิ่ม level เข้ามา
         super().__init__()
-        self.image = ResourceManager().get_image(f'meteor_{size[0]}', 'assets/images/meteor.png', size, (150, 75, 0))
-        self.rect = self.image.get_rect(topleft=(x, y))
-        self.speed = speed
-        self.hp = hp # เพิ่มระบบเลือดให้อุกกาบาต
+        if size == 'big':
+            self.image = ResourceManager().get_image('meteor_big', 'assets/images/meteor.png', (70, 70), (150, 75, 0))
+            self.hp = 2 + (level // 2) # เลือดเยอะขึ้น
+            self.speed = random.randint(1, 2 + (level//2))
+        else:
+            self.image = ResourceManager().get_image('meteor_small', 'assets/images/meteor.png', (35, 35), (150, 75, 0))
+            self.hp = 1
+            self.speed = random.randint(3, 5 + level) # เร็วขึ้น
+            
+        self.rect = self.image.get_rect(center=(random.randint(35, SCREEN_WIDTH-35), -50))
 
     def update(self):
         self.rect.y += self.speed
-        if self.rect.top > SCREEN_HEIGHT: self.kill()
+        if self.rect.top > SCREEN_HEIGHT:
+            self.kill()
 
 class MeteorFactory:
     @staticmethod
-    def spawn():
-        x = random.randint(0, SCREEN_WIDTH - 60)
-        y = random.randint(-100, -40)
-        
-        # อุกกาบาตใหญ่ (เลือด 3) / อุกกาบาตเล็ก (เลือด 1)
-        if random.random() < 0.3:
-            return Meteor(x, y, speed=random.randint(6, 9), size=(30, 30), hp=1) # ลูกเล็ก เร็ว เลือดน้อย
-        else:
-            return Meteor(x, y, speed=random.randint(2, 4), size=(80, 80), hp=3) # ลูกใหญ่ ช้า เลือดเยอะ
+    def spawn(level):
+        return Meteor(random.choice(['big', 'small']), level)
 
-# คลาสใหม่: ไอเทมเพิ่มเลือด
 class PowerUp(pygame.sprite.Sprite):
     def __init__(self):
         super().__init__()
-        self.image = ResourceManager().get_image('heal', 'assets/images/heal.png', (25, 25), (0, 255, 0))
-        self.rect = self.image.get_rect(topleft=(random.randint(0, SCREEN_WIDTH-25), -50))
+        self.image = ResourceManager().get_image('powerup', 'assets/images/heal.png', (30, 30), (0, 255, 255))
+        self.rect = self.image.get_rect(center=(random.randint(30, SCREEN_WIDTH-30), -50))
         self.speed = 3
 
     def update(self):
         self.rect.y += self.speed
-        if self.rect.top > SCREEN_HEIGHT: self.kill()
+        if self.rect.top > SCREEN_HEIGHT:
+            self.kill()
