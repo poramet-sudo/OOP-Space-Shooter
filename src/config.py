@@ -4,7 +4,12 @@ SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
 FPS = 60
 
-# Custom Events (Observer Pattern)
+# Custom Events 
 EVENT_METEOR_DESTROYED = pygame.USEREVENT + 1
 EVENT_PLAYER_HIT = pygame.USEREVENT + 2
-EVENT_POWERUP_COLLECTED = pygame.USEREVENT + 3 # เพิ่ม Event สำหรับเก็บยา
+EVENT_POWERUP_COLLECTED = pygame.USEREVENT + 3
+EVENT_ENEMY_SHOOT = pygame.USEREVENT + 4       
+EVENT_ENEMY_DESTROYED = pygame.USEREVENT + 5   
+
+# เป้าหมายคะแนนของด่าน 1 ถึง 5
+LEVEL_TARGETS = [150, 300, 500, 750, 1000]
