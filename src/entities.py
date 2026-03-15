@@ -53,13 +53,14 @@ class ShooterMixin:
         ResourceManager().play_sound('laser', 'assets/sounds/laser.ogg')
 
 class Player(pygame.sprite.Sprite, ShooterMixin):
-    def __init__(self, skin_path, bonus_hp=0): 
+    def __init__(self, skin_path, level, bonus_hp=0): 
         super().__init__()
         self.original_image = ResourceManager().get_image('player', skin_path, (60, 50), (0, 255, 0))
         self.image = self.original_image
         self.rect = self.image.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT - 60))
         self.speed = 6
-        self.__hp = 3 + bonus_hp 
+        # คำนวณ HP ตามด่าน (ด่าน 1=3, 2=6, 3=9...) + HP ที่เหลือจากด่านที่แล้ว
+        self.__hp = (level * 3) + bonus_hp 
         self.angle = 0 
 
     def get_hp(self): return self.__hp

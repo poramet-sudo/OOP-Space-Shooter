@@ -238,7 +238,8 @@ class PlayState(GameState):
         self.enemies = pygame.sprite.Group()
         self.enemy_lasers = pygame.sprite.Group()
         
-        self.player = Player(self.app.selected_skin, self.app.bonus_hp)
+        # เพิ่มพารามิเตอร์ current_level เข้าไปใน Player เพื่อคำนวณ HP ตามด่าน
+        self.player = Player(self.app.selected_skin, self.app.current_level, self.app.bonus_hp)
         self.all_sprites.add(self.player)
         
         self.collision_mgr = CollisionManager(
@@ -305,7 +306,8 @@ class PlayState(GameState):
 
     def check_level_clear(self):
         if self.score >= self.target_score:
-            self.app.bonus_hp += self.player.get_hp()
+            # เก็บค่า HP ที่เหลืออยู่ในด่านที่พึ่งผ่านมาเท่านั้น เพื่อใช้เป็นโบนัสในด่านถัดไป
+            self.app.bonus_hp = self.player.get_hp()
             
             if self.app.current_level == 5:
                 self.app.change_state(EndingState(self.app, self.score))
