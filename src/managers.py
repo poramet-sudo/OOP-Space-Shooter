@@ -11,8 +11,12 @@ class ResourceManager:
             cls._instance = super().__new__(cls)
             cls._instance.images = {}
             cls._instance.sounds = {}
-            cls._instance.fonts = {} # เพิ่มการเก็บ Font
+            cls._instance.fonts = {} 
+            cls._instance.explosion_frames = [] 
+            
             pygame.mixer.init()
+            cls._instance.bgm_playing = True 
+            cls._instance.bgm_volume = 0.2 # ระดับเสียงเริ่มต้นที่ 20%
         return cls._instance
 
     def get_image(self, name, path, size, fallback_color):
@@ -44,14 +48,56 @@ class ResourceManager:
         if self.sounds[name]:
             self.sounds[name].play()
 
+    def play_bgm(self, path):
+        try:
+            pygame.mixer.music.load(path)
+            pygame.mixer.music.set_volume(self.bgm_volume) 
+            pygame.mixer.music.play(-1) 
+        except Exception as e:
+            print(f"⚠️ โหลด BGM ไม่ได้: {e}")
+
+    def toggle_bgm(self):
+        if self.bgm_playing:
+            pygame.mixer.music.pause()
+            self.bgm_playing = False
+        else:
+            pygame.mixer.music.unpause()
+            self.bgm_playing = True
+        return self.bgm_playing
+
+    # --- ฟังก์ชันใหม่: ปรับระดับเสียง ---
+    def change_volume(self, amount):
+        self.bgm_volume += amount
+        self.bgm_volume = max(0.0, min(1.0, self.bgm_volume)) # ล็อกไว้ไม่ให้ต่ำกว่า 0 หรือเกิน 100%
+        pygame.mixer.music.set_volume(self.bgm_volume)
+        return self.bgm_volume
+
+    def load_explosion_frames(self):
+        if self.explosion_frames:
+            return self.explosion_frames
+        
+        explosion_frame_files = [f'assets/images/fire0{i}.png' for i in range(10)]
+        for frame_file in explosion_frame_files:
+            try:
+                img = pygame.image.load(frame_file).convert_alpha()
+                img = pygame.transform.scale(img, (70, 70))
+                self.explosion_frames.append(img)
+            except Exception as e:
+                print(f"⚠️ โหลดเฟรมระเบิดไม่ได้ {frame_file}: {e}")
+                surf = pygame.Surface((70, 70))
+                surf.fill((255, 0, 0))
+                self.explosion_frames.append(surf)
+        return self.explosion_frames
+
 class CollisionManager:
-    def __init__(self, player, meteors, lasers, powerups, enemies, enemy_lasers):
+    def __init__(self, player, meteors, lasers, powerups, enemies, enemy_lasers, all_sprites):
         self.player = player
         self.meteors = meteors
         self.lasers = lasers
         self.powerups = powerups
         self.enemies = enemies
         self.enemy_lasers = enemy_lasers
+        self.all_sprites = all_sprites
 
     def check(self):
         hits = pygame.sprite.groupcollide(self.meteors, self.lasers, False, True)
@@ -61,6 +107,10 @@ class CollisionManager:
                 meteor.kill()
                 pygame.event.post(pygame.event.Event(EVENT_METEOR_DESTROYED))
                 ResourceManager().play_sound('explosion', 'assets/sounds/explosion.ogg')
+                
+                from src.entities import Explosion
+                frames = ResourceManager().load_explosion_frames()
+                self.all_sprites.add(Explosion(meteor.rect.center, frames))
 
         enemy_hits = pygame.sprite.groupcollide(self.enemies, self.lasers, False, True)
         for enemy, laser_list in enemy_hits.items():
@@ -69,11 +119,19 @@ class CollisionManager:
                 enemy.kill()
                 pygame.event.post(pygame.event.Event(EVENT_ENEMY_DESTROYED))
                 ResourceManager().play_sound('explosion', 'assets/sounds/explosion.ogg')
+                
+                from src.entities import Explosion
+                frames = ResourceManager().load_explosion_frames()
+                self.all_sprites.add(Explosion(enemy.rect.center, frames))
 
         if pygame.sprite.spritecollide(self.player, self.meteors, True) or \
            pygame.sprite.spritecollide(self.player, self.enemies, True) or \
            pygame.sprite.spritecollide(self.player, self.enemy_lasers, True):
             pygame.event.post(pygame.event.Event(EVENT_PLAYER_HIT))
+            
+            from src.entities import Explosion
+            frames = ResourceManager().load_explosion_frames()
+            self.all_sprites.add(Explosion(self.player.rect.center, frames))
 
         if pygame.sprite.spritecollide(self.player, self.powerups, True):
             pygame.event.post(pygame.event.Event(EVENT_POWERUP_COLLECTED))
