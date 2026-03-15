@@ -9,32 +9,37 @@ class MainMenuState(GameState):
         self.app = app
         self.font_title = ResourceManager().get_font('assets/fonts/font.ttf', 50)
         self.font_btn = ResourceManager().get_font('assets/fonts/font.ttf', 24)
-        # หน้าเมนูใช้พื้นหลัง bg1.png
         self.bg = ResourceManager().get_image('bg1', 'assets/images/bg1.png', (SCREEN_WIDTH, SCREEN_HEIGHT), (20, 20, 40))
         
-        self.btn_play = Button(SCREEN_WIDTH//2, 250, 'assets/images/ui/button.png', "PLAY GAME", self.font_btn)
-        self.btn_skin = Button(SCREEN_WIDTH//2, 330, 'assets/images/ui/button.png', "SKINS", self.font_btn)
-        self.btn_level = Button(SCREEN_WIDTH//2, 410, 'assets/images/ui/button.png', "LEVELS", self.font_btn)
+        self.btn_play = Button(SCREEN_WIDTH//2, 230, 'assets/images/ui/button.png', "PLAY GAME", self.font_btn)
+        self.btn_skin = Button(SCREEN_WIDTH//2, 310, 'assets/images/ui/button.png', "SKINS", self.font_btn)
+        self.btn_level = Button(SCREEN_WIDTH//2, 390, 'assets/images/ui/button.png', "LEVELS", self.font_btn)
+        self.btn_exit = Button(SCREEN_WIDTH//2, 470, 'assets/images/ui/button.png', "EXIT", self.font_btn) 
 
     def handle_events(self, events):
         for event in events:
             if self.btn_play.is_clicked(event):
+                self.app.current_level = 1
+                self.app.bonus_hp = 0 # รีเซ็ตเลือดสะสมเมื่อเริ่มเกมใหม่
                 self.app.change_state(PlayState(self.app))
             elif self.btn_skin.is_clicked(event):
                 self.app.change_state(SkinSelectState(self.app))
             elif self.btn_level.is_clicked(event):
                 self.app.change_state(LevelSelectState(self.app))
+            elif self.btn_exit.is_clicked(event):
+                self.app.running = False
 
     def update(self): pass
 
     def draw(self, screen):
         screen.blit(self.bg, (0, 0))
         title = self.font_title.render("SPACE SHOOTER", True, (255, 215, 0))
-        screen.blit(title, title.get_rect(center=(SCREEN_WIDTH//2, 120)))
+        screen.blit(title, title.get_rect(center=(SCREEN_WIDTH//2, 100)))
         
         self.btn_play.draw(screen)
         self.btn_skin.draw(screen)
         self.btn_level.draw(screen)
+        self.btn_exit.draw(screen)
 
 class SkinSelectState(GameState):
     def __init__(self, app):
@@ -97,6 +102,7 @@ class LevelSelectState(GameState):
             for btn, lvl, is_unlocked in self.buttons:
                 if btn.is_clicked(event) and is_unlocked:
                     self.app.current_level = lvl
+                    self.app.bonus_hp = 0 # รีเซ็ตเลือดสะสมหากผู้เล่นข้ามมาเลือกด่านเอง
                     self.app.change_state(PlayState(self.app))
             if self.btn_back.is_clicked(event):
                 self.app.change_state(MainMenuState(self.app))
@@ -135,6 +141,7 @@ class GameOverState(GameState):
                 self.app.current_level += 1
                 self.app.change_state(PlayState(self.app))
             elif self.btn_restart.is_clicked(event):
+                self.app.bonus_hp = 0 # ถ้ายานแตกแล้วกดเริ่มเล่นด่านเดิม เลือดที่สะสมมาจะหายไป (กลับไปเริ่มที่ 3)
                 self.app.change_state(PlayState(self.app))
             elif self.btn_menu.is_clicked(event):
                 self.app.change_state(MainMenuState(self.app))
@@ -167,11 +174,12 @@ class PlayState(GameState):
         self.enemies = pygame.sprite.Group()
         self.enemy_lasers = pygame.sprite.Group()
         
-        self.player = Player(self.app.selected_skin)
+        # --- ส่งต่อ bonus_hp ที่สะสมมา ให้คลาส Player สร้างตัวละคร ---
+        self.player = Player(self.app.selected_skin, self.app.bonus_hp)
         self.all_sprites.add(self.player)
         
         self.collision_mgr = CollisionManager(
-            self.player, self.meteors, self.lasers, self.powerups, self.enemies, self.enemy_lasers
+            self.player, self.meteors, self.lasers, self.powerups, self.enemies, self.enemy_lasers, self.all_sprites
         )
         self.score = 0
         self.font = ResourceManager().get_font('assets/fonts/font.ttf', 24)
@@ -188,13 +196,8 @@ class PlayState(GameState):
         self.SPAWN_ENEMY_TIMER = pygame.USEREVENT + 12
         
         pygame.time.set_timer(self.SPAWN_METEOR_TIMER, max(300, 1500 - (level_mult * 200)))
-        
-        # --- 💊 อัปเกรดยา: เลเวลสูง ยิ่งดรอปไวขึ้น ---
-        # เลเวล 1: ดรอปทุกๆ ~10 วินาที
-        # เลเวล 5: ดรอปทุกๆ ~6 วินาที
         powerup_delay = max(5000, 11000 - (level_mult * 1000))
         pygame.time.set_timer(self.SPAWN_POWERUP_TIMER, powerup_delay)
-        
         pygame.time.set_timer(self.SPAWN_ENEMY_TIMER, max(800, 3000 - (level_mult * 400)))
 
     def handle_events(self, events):
@@ -241,6 +244,10 @@ class PlayState(GameState):
         if self.score >= self.target_score:
             if self.app.current_level == self.app.unlocked_levels and self.app.unlocked_levels < 5:
                 self.app.unlocked_levels += 1
+            
+            # --- ดึงเลือดที่รอดชีวิต มาบวกเข้ากระเป๋าโบนัส เพื่อส่งต่อไปด่านหน้า ---
+            self.app.bonus_hp += self.player.get_hp()
+            
             self.app.change_state(GameOverState(self.app, self.score, is_victory=True))
 
     def update(self):
@@ -262,8 +269,6 @@ class PlayState(GameState):
 class GameApp:
     def __init__(self):
         pygame.init()
-        # --- เปลี่ยนโหมดเป็น RESIZABLE เพื่อเรียกขอบหน้าต่างและปุ่ม 3 ปุ่มกลับมา ---
-        # เมื่อกดปุ่มสี่เหลี่ยม (Maximize) ระบบ SCALED จะขยายภาพให้เต็มจอโดยรักษาสัดส่วนไว้ให้เอง
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE | pygame.SCALED)
         pygame.display.set_caption("OOP Space Shooter (20 Pointers Project)")
         self.clock = pygame.time.Clock()
@@ -272,6 +277,9 @@ class GameApp:
         self.unlocked_levels = 1
         self.current_level = 1
         self.selected_skin = 'assets/images/ships/ship1.png'
+        
+        # --- เพิ่มตัวแปรเก็บโบนัสเลือดสะสม (จะรีเซ็ตเหลือ 0 ทุกครั้งที่กดเริ่มเกมใหม่ หรือตายแล้วกด Retry) ---
+        self.bonus_hp = 0 
         
         self.current_state = MainMenuState(self)
 
@@ -282,12 +290,8 @@ class GameApp:
         while self.running:
             events = pygame.event.get()
             for event in events:
-                # ระบบจะจับการกดปุ่มกากบาท (Close) อัตโนมัติที่นี่
                 if event.type == pygame.QUIT:
                     self.running = False
-                
-                # หากต้องการกด ESC เพื่อสลับโหมดเต็มจอ (กดซ้ำเพื่อย่อ/ขยาย) 
-                # (เป็นลูกเล่นแถมให้ครับ นอกเหนือจากการกดปุ่มสี่เหลี่ยมด้วยเมาส์)
                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     pygame.display.toggle_fullscreen()
 

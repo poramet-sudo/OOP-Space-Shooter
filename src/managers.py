@@ -11,7 +11,8 @@ class ResourceManager:
             cls._instance = super().__new__(cls)
             cls._instance.images = {}
             cls._instance.sounds = {}
-            cls._instance.fonts = {} # เพิ่มการเก็บ Font
+            cls._instance.fonts = {} 
+            cls._instance.explosion_frames = [] # เพิ่มแคชเก็บรูประเบิด
             pygame.mixer.init()
         return cls._instance
 
@@ -44,16 +45,37 @@ class ResourceManager:
         if self.sounds[name]:
             self.sounds[name].play()
 
+    def load_explosion_frames(self):
+        # โหลดรูปไฟระเบิด fire00.png ถึง fire09.png
+        if self.explosion_frames:
+            return self.explosion_frames
+        
+        explosion_frame_files = [f'assets/images/fire0{i}.png' for i in range(10)]
+        for frame_file in explosion_frame_files:
+            try:
+                img = pygame.image.load(frame_file).convert_alpha()
+                img = pygame.transform.scale(img, (70, 70))
+                self.explosion_frames.append(img)
+            except Exception as e:
+                print(f"⚠️ โหลดเฟรมระเบิดไม่ได้ {frame_file}: {e}")
+                surf = pygame.Surface((70, 70))
+                surf.fill((255, 0, 0))
+                self.explosion_frames.append(surf)
+        return self.explosion_frames
+
 class CollisionManager:
-    def __init__(self, player, meteors, lasers, powerups, enemies, enemy_lasers):
+    # เพิ่ม all_sprites เข้ามาเพื่อวาดระเบิดลงจอ
+    def __init__(self, player, meteors, lasers, powerups, enemies, enemy_lasers, all_sprites):
         self.player = player
         self.meteors = meteors
         self.lasers = lasers
         self.powerups = powerups
         self.enemies = enemies
         self.enemy_lasers = enemy_lasers
+        self.all_sprites = all_sprites
 
     def check(self):
+        # 1. เลเซอร์ ชน อุกกาบาต
         hits = pygame.sprite.groupcollide(self.meteors, self.lasers, False, True)
         for meteor, laser_list in hits.items():
             meteor.hp -= len(laser_list)
@@ -61,7 +83,13 @@ class CollisionManager:
                 meteor.kill()
                 pygame.event.post(pygame.event.Event(EVENT_METEOR_DESTROYED))
                 ResourceManager().play_sound('explosion', 'assets/sounds/explosion.ogg')
+                
+                # โชว์เอฟเฟคระเบิด
+                from src.entities import Explosion
+                frames = ResourceManager().load_explosion_frames()
+                self.all_sprites.add(Explosion(meteor.rect.center, frames))
 
+        # 2. เลเซอร์ ชน ศัตรู AI
         enemy_hits = pygame.sprite.groupcollide(self.enemies, self.lasers, False, True)
         for enemy, laser_list in enemy_hits.items():
             enemy.hp -= len(laser_list)
@@ -69,12 +97,24 @@ class CollisionManager:
                 enemy.kill()
                 pygame.event.post(pygame.event.Event(EVENT_ENEMY_DESTROYED))
                 ResourceManager().play_sound('explosion', 'assets/sounds/explosion.ogg')
+                
+                # โชว์เอฟเฟคระเบิด
+                from src.entities import Explosion
+                frames = ResourceManager().load_explosion_frames()
+                self.all_sprites.add(Explosion(enemy.rect.center, frames))
 
+        # 3. ผู้เล่น โดนชน (อุกกาบาต, ศัตรู, เลเซอร์ศัตรู)
         if pygame.sprite.spritecollide(self.player, self.meteors, True) or \
            pygame.sprite.spritecollide(self.player, self.enemies, True) or \
            pygame.sprite.spritecollide(self.player, self.enemy_lasers, True):
             pygame.event.post(pygame.event.Event(EVENT_PLAYER_HIT))
+            
+            # โชว์เอฟเฟคระเบิดตรงผู้เล่น
+            from src.entities import Explosion
+            frames = ResourceManager().load_explosion_frames()
+            self.all_sprites.add(Explosion(self.player.rect.center, frames))
 
+        # 4. ผู้เล่น ชน ยาเพิ่มเลือด
         if pygame.sprite.spritecollide(self.player, self.powerups, True):
             pygame.event.post(pygame.event.Event(EVENT_POWERUP_COLLECTED))
             ResourceManager().play_sound('heal', 'assets/sounds/heal.ogg')

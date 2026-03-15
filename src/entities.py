@@ -32,13 +32,14 @@ class ShooterMixin:
         ResourceManager().play_sound('laser', 'assets/sounds/laser.ogg')
 
 class Player(pygame.sprite.Sprite, ShooterMixin):
-    def __init__(self, skin_path): 
+    # --- ปรับให้รับ bonus_hp เข้ามาบวกเพิ่มตอนเริ่มด่าน ---
+    def __init__(self, skin_path, bonus_hp=0): 
         super().__init__()
         self.original_image = ResourceManager().get_image('player', skin_path, (60, 50), (0, 255, 0))
         self.image = self.original_image
         self.rect = self.image.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT - 60))
         self.speed = 6
-        self.__hp = 3
+        self.__hp = 3 + bonus_hp # เลือดพื้นฐาน 3 + เลือดที่สะสมมาจากด่านก่อนๆ
         self.angle = 0 
 
     def get_hp(self): return self.__hp
@@ -48,8 +49,8 @@ class Player(pygame.sprite.Sprite, ShooterMixin):
         ResourceManager().play_sound('damage', 'assets/sounds/damage.ogg') 
         
     def heal(self): 
-        if self.__hp < 5: 
-            self.__hp += 1
+        # ปลดล็อกขีดจำกัดเลือด สามารถเก็บยาเพิ่มเลือดไปได้เรื่อยๆ ไม่มีลิมิต!
+        self.__hp += 1
 
     def update(self):
         keys = pygame.key.get_pressed()
@@ -93,11 +94,9 @@ class EnemyLaser(BaseLaser):
     def __init__(self, x, y, angle):
         super().__init__(x, y, angle, 'assets/images/laserRed01.png', speed=7)
 
-# --- ระบบบอท (AI ติดตามผู้เล่นและสุ่มสี) ---
 class EnemyShip(pygame.sprite.Sprite):
     def __init__(self, x, y, player, level): 
         super().__init__()
-        # สุ่มสียานศัตรู
         colors = ['black', 'blue', 'green', 'red']
         chosen_color = random.choice(colors)
         img_path = f'assets/images/enemy_{chosen_color}.png'
@@ -106,29 +105,24 @@ class EnemyShip(pygame.sprite.Sprite):
         self.image = self.original_image
         self.rect = self.image.get_rect(center=(x, y))
         
-        # ยิ่งด่านลึก ยิ่งวิ่งเร็วและเลือดยาวขึ้น
         self.speed = random.randint(1 + (level // 2), 3 + (level // 2)) 
         self.hp = 1 + (level // 2)
         
         self.last_shot = pygame.time.get_ticks()
-        # ยิ่งด่านลึก ยิ่งยิงรัวขึ้น
         self.shoot_delay = max(800, random.randint(1500, 3000) - (level * 200)) 
         self.player = player
         self.angle = 180
 
     def update(self):
-        # AI เคลื่อนที่เข้าหาผู้เล่น
-        self.rect.y += self.speed # บินลงมาข้างล่างเสมอ
+        self.rect.y += self.speed 
         
         if self.player and self.player.alive():
-            # ขยับแกน X บินตามผู้เล่นแบบเนียนๆ (Tracking X)
-            tracking_speed = max(1, self.speed // 2) # ตามช้ากว่าบินลงนิดหน่อยเพื่อให้หลบได้
+            tracking_speed = max(1, self.speed // 2) 
             if self.rect.centerx < self.player.rect.centerx:
                 self.rect.x += tracking_speed
             elif self.rect.centerx > self.player.rect.centerx:
                 self.rect.x -= tracking_speed
 
-            # เล็งปืนมาที่ผู้เล่น
             rel_x, rel_y = self.player.rect.centerx - self.rect.centerx, self.player.rect.centery - self.rect.centery
             self.angle = (180 / math.pi) * -math.atan2(rel_y, rel_x) - 90
             
@@ -144,16 +138,16 @@ class EnemyShip(pygame.sprite.Sprite):
             self.kill()
 
 class Meteor(pygame.sprite.Sprite):
-    def __init__(self, size, level): # เพิ่ม level เข้ามา
+    def __init__(self, size, level):
         super().__init__()
         if size == 'big':
             self.image = ResourceManager().get_image('meteor_big', 'assets/images/meteor.png', (70, 70), (150, 75, 0))
-            self.hp = 2 + (level // 2) # เลือดเยอะขึ้น
+            self.hp = 2 + (level // 2) 
             self.speed = random.randint(1, 2 + (level//2))
         else:
             self.image = ResourceManager().get_image('meteor_small', 'assets/images/meteor.png', (35, 35), (150, 75, 0))
             self.hp = 1
-            self.speed = random.randint(3, 5 + level) # เร็วขึ้น
+            self.speed = random.randint(3, 5 + level) 
             
         self.rect = self.image.get_rect(center=(random.randint(35, SCREEN_WIDTH-35), -50))
 
@@ -178,3 +172,25 @@ class PowerUp(pygame.sprite.Sprite):
         self.rect.y += self.speed
         if self.rect.top > SCREEN_HEIGHT:
             self.kill()
+
+class Explosion(pygame.sprite.Sprite):
+    def __init__(self, center, frames):
+        super().__init__()
+        self.frames = frames
+        self.frame_index = 0
+        self.image = self.frames[self.frame_index]
+        self.rect = self.image.get_rect(center=center)
+        self.last_update = pygame.time.get_ticks()
+        self.frame_rate = 30 
+
+    def update(self):
+        now = pygame.time.get_ticks()
+        if now - self.last_update > self.frame_rate:
+            self.last_update = now
+            self.frame_index += 1
+            if self.frame_index >= len(self.frames):
+                self.kill() 
+            else:
+                center = self.rect.center
+                self.image = self.frames[self.frame_index]
+                self.rect = self.image.get_rect(center=center)
