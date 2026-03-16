@@ -5,7 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "oop-space-shooter"
 version = "1.0.0"
-description = "Final Team Project for OOP Course"
+description = "Final Team Project for OOP Course - เกมยิงอวกาศ โดยทีมผจญภัยในต่างโลก"
+authors = [
+    { name = "ปรเมศ กองสุวรรณ์", email = "poramet.ko.68@ubu.ac.th" },
+    { name = "วิศรุต ปู่แก้ว", email = "wisarut.bu.68@ubu.ac.th" }
+]
+readme = "README.md"
+requires-python = ">=3.8"
 dependencies = [
-    "pygame"
+    "pygame>=2.5.0"
 ]
